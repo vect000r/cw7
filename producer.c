@@ -9,6 +9,12 @@
 #define SEM_PROD "/producent"
 #define SHM_NAME "/memory"
 
+// argv[1]- semafor konsumenta
+// argv[2]- semafor producenta
+// argv[3]- pamięć dzielona
+// argv[4]- nazwa pliku
+
+
 int main(int argc, char *argv[])
 {
     int fd_in;
@@ -23,11 +29,21 @@ int main(int argc, char *argv[])
         int wstaw, wyjmij;      // Pozycje wstawiania i wyjmowania z bufora
     } SegmentPD;
 
-    sem_t *semConsumer = openSem(SEM_CON);
-    sem_t *semProducer = openSem(SEM_PROD);
-    int shm = openMem(SHM_NAME, sizeof(SegmentPD));
+    if (argc != 5)
+    {
+        fprintf(stderr, "Usage: %s <file>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    
+    sem_t *semConsumer = openSem(argv[1]);
+    sem_t *semProducer = openSem(argv[2]);
+    int shm = openMem(argv[3], sizeof(SegmentPD));
     SegmentPD *fdshm = (SegmentPD *)mapMem(shm, sizeof(SegmentPD));
 
+    printf("Consumer semaphore address: %p, initial value: %d\n", semConsumer, getSemValue(semConsumer));
+    printf("Producer semaphore address: %p, initial value: %d\n", semProducer, getSemValue(semProducer));
+    printf("Shared memory address: %d, size: %d\n", shm, sizeof(SegmentPD));
+    
     while (1)
     {
         // produkcja towaru
@@ -37,7 +53,7 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
-        waitSem(SEM_PROD);
+        waitSem(argv[2]);
         // sekcja krytyczna - semafor obniżony
 
         fdshm->wstaw = (fdshm->wstaw + 1) % NELE;
@@ -45,11 +61,11 @@ int main(int argc, char *argv[])
         //fdshm->bufor[fdshm->wstaw] = bytes_read;
 
         printf("Proces potomny %d zajął semafor.\n", getpid());
-        raiseSem(SEM_CON);
+        raiseSem(argv[1]);
         // podniesienie semafora
     }
-    closeSem(SEM_PROD);
-    closeSem(SEM_CON);
+    closeSem(argv[1]);
+    closeSem(argv[2]);
 
     exit(EXIT_SUCCESS);
     return 0;

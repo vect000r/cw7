@@ -20,7 +20,7 @@ typedef struct
     int wstaw, wyjmij; // Pozycje wstawiania i wyjmowania z bufora
 } SegmentPD;
 
-int main()
+int main(int argc, char *argv[])
 {
     sem_t *sem_con = createSem(SEM_CON);
     sem_t *sem_prod = createSem(SEM_PROD);
@@ -28,61 +28,39 @@ int main()
 
     printf("Consumer semaphore address: %p, initial value: %d\n", sem_con, getSemValue(sem_con));
     printf("Producer semaphore address: %p, initial value: %d\n", sem_prod, getSemValue(sem_prod));
+    printf("Shared memory address: %d, size: %d\n", shm, sizeof(SegmentPD));
 
-    int pid_prod = fork();
-    switch (pid_prod)
+    pid_t pid1, pid2;
+
+    (pid1 = fork()) && (pid2 = fork()); 
+    
+    if (pid1 == 0) 
     {
-    case -1:
-        // błąd
-        perror("Błąd forka");
-        exit(EXIT_FAILURE);
-        break;
-    case 0:
-        // child
-        // producent
-        if (execlp("./producer.x", "./producer.x", SEM_CON, SEM_PROD, SHM_NAME, NULL) == -1)
+        execlp("./producer.x", SEM_CON, SEM_PROD, SHM_NAME, "producer.txt", NULL);
+    } 
+    else if (pid2 == 0) 
+    {
+        execlp("./consumer.x", SEM_CON, SEM_PROD, SHM_NAME, "consumer.txt", NULL);
+    } 
+    else 
+    {
+        
+        if(waitpid(pid1, NULL, 0) == -1)
         {
-            perror("Execlp error in child process\n");
+            perror("Wait error 1");
+            exit(EXIT_FAILURE);
+        } 
+        
+        if(waitpid(pid2, NULL, 0) == -1)
+        {
+            perror("Wait error 2");
             exit(EXIT_FAILURE);
         }
-        break;
-    default:
-        // parent
-        int pid_con = fork();
-        switch (pid_con)
-        {
-        case -1:
-            // błąd
-            perror("Błąd forka");
-            exit(EXIT_FAILURE);
-            break;
-        case 0:
-            // child
-            // konsument
-            if (execlp("./consumer.x", "./consumer.x", SEM_PROD, SHM_NAME, NULL) == -1)
-            {
-                perror("Execlp error in child process\n");
-                exit(EXIT_FAILURE);
-            }
-            break;
-        default:
-            // parent
-            if (waitpid(pid_prod, NULL, 0) == -1)
-            {
-                perror("Wait error");
-                exit(EXIT_FAILURE);
-            }
-            if (waitpid(pid_con, NULL, 0) == -1)
-            {
-                perror("Wait error");
-                exit(EXIT_FAILURE);
-            }
-            // Usuwanie semaforów i pamięci dzielonej
-            removeSem(SEM_CON);
-            removeSem(SEM_PROD);
-            remove_shm(SHM_NAME);
-            break;
-        }
-        break;
+        
+        // Usuwanie semaforów i pamięci dzielonej
+        removeSem(SEM_CON);
+        removeSem(SEM_PROD);
+        remove_shm(SHM_NAME);
     }
-}
+    return 0;
+}          
