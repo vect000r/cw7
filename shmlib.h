@@ -6,8 +6,19 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
+#define NELE 20
+#define NBUF 6
+
+
 #ifndef SHMLIB_H
 #define SHMLIB_H
+
+typedef struct
+{
+    char bufor[NBUF][NELE]; // Wspolny bufor danych
+    int in, out;      // Pozycje wstawiania i wyjmowania z bufora
+} SegmentPD;
+
 
 // Tworzenie pamięci dzielonej
 

@@ -1,62 +1,70 @@
 #include <string.h>
 #include "semaphores.h"
 #include "shmlib.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-#define NELE 20 // Rozmiar elementu bufora (jednostki towaru) w bajtach
-#define NBUF 5  // Liczba elementow bufora
+// argv[1]- semafor konsumenta
+// argv[2]- semafor producenta
+// argv[3]- pamięć dzielona
+// argv[4]- nazwa pliku
 
-#define SEM_CON "/konsument"
-#define SEM_PROD "/producent"
-#define SHM_NAME "/memory"
-
-int main()
+int main(int argc, char *argv[])
 {
-    int fd_out;
-    ssize_t bytes_read, bytes_written;
-    int wstaw = 0;
-    char buffer[NELE];
-    int pid;
-
-    typedef struct
+    if (argc != 5)
     {
-        char bufor[NBUF][NELE]; // Wspolny bufor danych
-        int wstaw, wyjmij;      // Pozycje wstawiania i wyjmowania z bufora
-    } SegmentPD;
-    
-    // sekcja prywatna
-    sem_t *semConsumer = openSem(SEM_CON);
-    sem_t *semProducer = openSem(SEM_PROD);
-    int shm = open_shm(SHM_NAME);
-    SegmentPD *fdshm = (SegmentPD *)mapMem(shm, sizeof(SegmentPD));
+        perror("Wrong number of arguments");
+        exit(EXIT_FAILURE);
+    }
 
-    fd_out = open("consumer.txt", O_RDONLY);
-    if (fd_out == -1)
+    sem_t *semConsumer = openSem(argv[1]);
+    sem_t *semProducer = openSem(argv[2]);
+    int shm = open_shm(argv[3]);
+    SegmentPD *fdshm = (SegmentPD *)map_shm(shm, sizeof(SegmentPD));
+
+    int file = open(argv[4], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (file == -1)
     {
         perror("open error");
         exit(EXIT_FAILURE);
     }
 
+    char item[NELE];
+    //int i = 1;
+
     while (1)
     {
-        // produkcja towaru
-        if (bytes_read = write(fd_out, buffer, NELE) == -1)
+        semWait(semConsumer);
+
+        //char item[NELE];
+        strncpy(item, fdshm->bufor[fdshm->out], NELE);
+        
+        fdshm->out = (fdshm->out + 1) % NBUF;
+
+        if (strcmp(item, "\0") == 0)
         {
-            perror("Read function error");
+            break;
+        }
+
+        if (write(file, item, strlen(item)) == -1)
+        {
+            perror("write error");
             exit(EXIT_FAILURE);
         }
 
-        waitSem(semConsumer);
-        // sekcja krytyczna - semafor obniżony
+        printf("Consumer: %s\n", item);
 
-        fdshm->wyjmij = (fdshm->wyjmij + 1) % NELE;
-        // strncpy(fdmem->bufor[fdmem->wyjmij]);
-        printf("Child process %d occupied semaphore.\n", getpid());
-        // podniesienie semafora
-        raiseSem(semProducer);
+        semPost(semProducer);
+        //i = i + 1;
+        
+    
     }
+
+    close(file);
     closeSem(semProducer);
     closeSem(semConsumer);
 
     exit(EXIT_SUCCESS);
-    return 0;           
 }

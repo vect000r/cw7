@@ -95,4 +95,12 @@ void unlinkSem(const char *name)
     }
 }
 
+void setSemValue(sem_t *sem, int value)
+{
+    while (getSemValue(sem) > 0)
+        semWait(sem);
+    while (getSemValue(sem) < value)
+        semPost(sem);
+}
+
 #endif

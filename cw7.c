@@ -6,61 +6,117 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
-#define NELE 20
-#define NBUF 5
 #define SEM_CON "/konsument"
 #define SEM_PROD "/producent"
 #define SHM_NAME "/memory"
 
-
-typedef struct 
+void cleanup()
 {
-    char bufor[NBUF][NELE]; // Wspolny bufor danych
-    int wstaw, wyjmij; // Pozycje wstawiania i wyjmowania z bufora
-} SegmentPD;
+    unlinkSem(SEM_CON);
+    unlinkSem(SEM_PROD);
+    delete_shm(SHM_NAME);
+}
+
+
 
 int main(int argc, char *argv[])
 {
-    sem_t *sem_con = createSem(SEM_CON);
-    sem_t *sem_prod = createSem(SEM_PROD);
-    int shm = create_shm(SHM_NAME, sizeof(SegmentPD));
+    if(signal(SIGINT,cleanup) == SIG_ERR)
+    {
+        perror("Signal handling error");
+        exit(EXIT_FAILURE);
+    }
+    
+    atexit(cleanup);
 
-    printf("Consumer semaphore address: %p, initial value: %d\n", sem_con, getSemValue(sem_con));
-    printf("Producer semaphore address: %p, initial value: %d\n", sem_prod, getSemValue(sem_prod));
-    printf("Shared memory address: %d, size: %d\n", shm, sizeof(SegmentPD));
+    sem_t *sem_con = createSem(SEM_CON);
+    if (sem_con == SEM_FAILED)
+    {
+        perror("Consumer semaphore creation failed");
+        exit(EXIT_FAILURE);
+    }
+    sem_t *sem_prod = createSem(SEM_PROD);
+    if (sem_prod == SEM_FAILED)
+    {
+        perror("Producer semaphore creation failed");
+        unlinkSem(SEM_CON);
+        exit(EXIT_FAILURE);
+    }
+    int shm = create_shm(SHM_NAME, sizeof(SegmentPD));
+    if (shm == -1)
+    {
+        perror("Shared memory creation failed");
+        unlinkSem(SEM_CON);
+        unlinkSem(SEM_PROD);
+        exit(EXIT_FAILURE);
+    }
+
+    // Initialize the semaphores
+    if (sem_init(sem_con, 1, 0) == -1) {
+        perror("sem_init failed for consumer semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_init(sem_prod, 1, NBUF) == -1) {
+        perror("sem_init failed for producer semaphore");
+        exit(EXIT_FAILURE);
+    }
+
+    // Initialize the shared memory segment
+    SegmentPD *segment = (SegmentPD *)map_shm(shm, sizeof(SegmentPD));
+    segment->in = 0;
+    segment->out = 0;
+
+    printf("Consumer semaphore address: %p, initial value: %d\n", (void *)sem_con, getSemValue(sem_con));
+    printf("Producer semaphore address: %p, initial value: %d\n", (void *)sem_prod, getSemValue(sem_prod));
+    printf("Shared memory address: %d, size: %ld\n", shm, sizeof(SegmentPD));
 
     pid_t pid1, pid2;
 
-    (pid1 = fork()) && (pid2 = fork()); 
-    
-    if (pid1 == 0) 
+    pid1 = fork();
+    if (pid1 == -1)
     {
-        execlp("./producer.x", SEM_CON, SEM_PROD, SHM_NAME, "producer.txt", NULL);
-    } 
-    else if (pid2 == 0) 
-    {
-        execlp("./consumer.x", SEM_CON, SEM_PROD, SHM_NAME, "consumer.txt", NULL);
-    } 
-    else 
-    {
-        
-        if(waitpid(pid1, NULL, 0) == -1)
-        {
-            perror("Wait error 1");
-            exit(EXIT_FAILURE);
-        } 
-        
-        if(waitpid(pid2, NULL, 0) == -1)
-        {
-            perror("Wait error 2");
-            exit(EXIT_FAILURE);
-        }
-        
-        // Usuwanie semaforów i pamięci dzielonej
-        removeSem(SEM_CON);
-        removeSem(SEM_PROD);
-        remove_shm(SHM_NAME);
+        perror("Fork failed for producer");
+        cleanup();
+        exit(EXIT_FAILURE);
     }
+
+    if (pid1 == 0)
+    {
+        execlp("./producer.x", "./producer.x", SEM_CON, SEM_PROD, SHM_NAME, "producer.txt", NULL);
+        perror("execlp failed for producer");
+        exit(EXIT_FAILURE);
+    }
+
+    pid2 = fork();
+    if (pid2 == -1)
+    {
+        perror("Fork failed for consumer");
+        cleanup();
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid2 == 0)
+    {
+        execlp("./consumer.x", "./consumer.x", SEM_CON, SEM_PROD, SHM_NAME, "consumer.txt", NULL);
+        perror("execlp failed for consumer");
+        exit(EXIT_FAILURE);
+    }
+
+    // Parent process waits for both child processes
+    if (waitpid(pid1, NULL, 0) == -1)
+    {
+        perror("Wait error for producer");
+    }
+
+    if (waitpid(pid2, NULL, 0) == -1)
+    {
+        perror("Wait error for consumer");
+    }
+
+    // Cleanup
+    
+
     return 0;
-}          
+}
