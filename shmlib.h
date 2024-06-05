@@ -7,7 +7,7 @@
 #include <fcntl.h>
 
 #define NELE 20
-#define NBUF 6
+#define NBUF 5
 
 
 #ifndef SHMLIB_H

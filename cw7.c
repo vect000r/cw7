@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Initialize the semaphores
+    // Inicjalizacja semaforów
     if (sem_init(sem_con, 1, 0) == -1) {
         perror("sem_init failed for consumer semaphore");
         exit(EXIT_FAILURE);
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Initialize the shared memory segment
+    
     SegmentPD *segment = (SegmentPD *)map_shm(shm, sizeof(SegmentPD));
     segment->in = 0;
     segment->out = 0;

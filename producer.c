@@ -24,6 +24,8 @@ int main(int argc, char *argv[])
     int shm = open_shm(argv[3]);
     SegmentPD *fdshm = (SegmentPD *)map_shm(shm, sizeof(SegmentPD));
 
+    fdshm->in = 0;
+
     int file = open(argv[4], O_RDONLY);
     if (file == -1)
     {
@@ -31,32 +33,42 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    char item[NELE];
-    ssize_t bytes_read;
-    while ((bytes_read = read(file, item, NELE)) > 0)
+   
+    while (1)
     {
+        
         semWait(semProducer);
-
-        memcpy(fdshm->bufor[fdshm->in], item, bytes_read);
-        //fdshm->bufor[fdshm->in] = item;
         
+        int bytes_read = read(file, fdshm->bufor[fdshm->in], NELE);
+        if (bytes_read == -1)
+        {
+            perror("read error");
+            exit(EXIT_FAILURE);
+        }
+        
+        if(bytes_read != NELE)
+        {
+            fdshm->bufor[fdshm->in][bytes_read] = '\0'; // zapisujemy \0
+            printf("Producer wrote to buffer: %s\n", fdshm->bufor[fdshm->in]);
+            semPost(semConsumer);
+            break;
+        }
+    
         fdshm->in = (fdshm->in + 1) % NBUF;
-        
-        //fdshm->bufor[fdshm->in][bytes_read] = '\0'; // zapisujemy \0
         semPost(semConsumer);
     }
-    //fdshm->bufor[fdshm->in][bytes_read - 1] = '\0'; // zapisujemy \0
-    if(bytes_read == NELE) {
-        semWait(semProducer);
-        strncpy(fdshm->bufor[fdshm->in], "\0", 1);
-        fdshm->in = (fdshm->in + 1) % NBUF;
-        semPost(semConsumer);
+    
+
+
+    if(close(file)==-1)
+    {
+        perror("close error");
+        exit(EXIT_FAILURE);
     }
-
-
-    close(file);
+    
     closeSem(semProducer);
     closeSem(semConsumer);
-
+    close_shm(shm);
+    
     exit(EXIT_SUCCESS);
 }
