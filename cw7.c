@@ -63,7 +63,6 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    
     SegmentPD *segment = (SegmentPD *)map_shm(shm, sizeof(SegmentPD));
     segment->in = 0;
     segment->out = 0;
@@ -104,7 +103,6 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    // Parent process waits for both child processes
     if (waitpid(pid1, NULL, 0) == -1)
     {
         perror("Wait error for producer");
@@ -114,9 +112,6 @@ int main(int argc, char *argv[])
     {
         perror("Wait error for consumer");
     }
-
-    // Cleanup
-    
 
     return 0;
 }
